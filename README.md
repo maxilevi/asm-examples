@@ -1,4 +1,4 @@
-##Conversor de números
+## Conversor de números
 Desarrollar en assembler Intel 80x86 un programa que permita:
 * Ingresar la configuración binaria o hexadecimal de un BCD empaquetado de 4 bytes y
 mostrar el número almacenado en base 10.
