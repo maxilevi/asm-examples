@@ -180,6 +180,17 @@ ejecutar_operacion_dec_hex_BCD:
     call imprimir_mensaje
     call recibir_decimal_stdin
     
+    call decimal_a_BCD
+    mov eax,dword[bcd_en_memoria]
+    mov dword[decimal_en_memoria],eax
+    
+    ; Pasamos 32 bits = 4 bytes = 8 nibbles
+    mov eax,8
+    call decimal_a_string_hexadecimal
+    
+    ; Finalmente mostramos
+    call mostrar_configuracion
+    
     jmp terminar_operacion
 
 ejecutar_operacion_dec_bin_BCD:
@@ -187,6 +198,17 @@ ejecutar_operacion_dec_bin_BCD:
     mov eax,ingresar_operacion_decimal
     call imprimir_mensaje
     call recibir_decimal_stdin
+    
+    ; Pasamos el decimal a un BCD
+    call decimal_a_BCD
+    mov eax,dword[bcd_en_memoria]
+    mov dword[decimal_en_memoria],eax
+    
+    mov eax,32
+    call decimal_a_string_binario
+    
+    ; Finalmente mostramos
+    call mostrar_configuracion
 
     jmp terminar_operacion
 
@@ -202,9 +224,8 @@ ejecutar_operacion_dec_hex_BPF:
     mov eax,4
     call decimal_a_string_hexadecimal
 
-    ; Finalmente imprimimos
-    mov eax,configuracion_string
-    call mostrar_string
+    ; Finalmente mostramos
+    call mostrar_configuracion
 
     jmp terminar_operacion
 
@@ -220,13 +241,16 @@ ejecutar_operacion_dec_bin_BPF:
     mov eax,16
     call decimal_a_string_binario
     
-    ; Finalmente imprimimos
-    mov eax,configuracion_string
-    call mostrar_string
+    ; Finalmente mostramos
+    call mostrar_configuracion
     
     jmp terminar_operacion
 
 ;;;;;;;; Rutinas Principales ;;;;;;;;;
+
+; Convierte en bcd_en_memoria el valor del decimal en decimal_en_memoria
+decimal_a_BCD:
+ret
 
 ; Devuelve en configuracion_string un string que representa en hexadecimal lo que hay en hexadecimal_en_memoria
 decimal_a_string_hexadecimal:
@@ -454,6 +478,12 @@ string_binario_a_numero:
     ret
 
 ;;;;;;;; Funciones Auxiliares ;;;;;;;;
+
+mostrar_configuracion:
+    ; Finalmente imprimimos
+    mov eax,configuracion_string
+    call mostrar_string
+    ret
 
 ; Pide un string y lo pasa de hexa a memoria
 pedir_string_hexa_a_numero:
