@@ -52,6 +52,7 @@ hexadecimal_en_memoria resd 1
 binario_en_memoria resd 1
 bcd_en_memoria resd 1
 decimal_en_memoria resd 1
+bpf_en_memoria resd 1
 
 section .text
 _main:
@@ -119,13 +120,7 @@ ejecutar_operacion_bin_BCD:
     mov eax, ingresar_operacion_bin_BCD
     call imprimir_mensaje
     
-    ; Recibimos el string en binario
-    call recibir_configuracion_stdin
-   
-    ; Pasamos el string de ceros y unos a memoria
-    ; Ponemos en ebx la cantidad de bits del string
-    mov ebx,32
-    call string_binario_a_numero
+    call pedir_string_binario_32bits_a_numero
     
     ; Del binario en memoria agarramos el valor del BCD
     mov eax, dword[binario_en_memoria]
@@ -138,11 +133,7 @@ ejecutar_operacion_hex_BCD:
     mov eax, ingresar_operacion_hex_BCD
     call imprimir_mensaje
     
-    ; Recibimos el string en hexadecimal
-    call recibir_configuracion_stdin
-    
-    ; Pasamos el string en hexa a numero
-    call string_hexadecimal_a_numero
+    call pedir_string_hexa_a_numero
     
     ; Del hexadecimal en memoria agarramos el valor del BCD
     mov eax, dword[hexadecimal_en_memoria]
@@ -155,6 +146,11 @@ ejecutar_operacion_bin_BPF:
     mov eax, ingresar_operacion_hex_BPF
     call imprimir_mensaje
     
+    call pedir_string_binario_16bits_a_numero
+    
+    ; Del binario en memoria agarramos el valor del BPF
+    mov eax, dword[binario_en_memoria]
+    call calcular_BPF_y_mostrar
     
     jmp terminar_operacion
 
@@ -163,6 +159,11 @@ ejecutar_operacion_hex_BPF:
     mov eax, ingresar_operacion_hex_BPF
     call imprimir_mensaje
     
+    call pedir_string_hexa_a_numero
+    
+    ; Del hexadecimal en memoria agarramos el valor del BPF
+    mov eax, dword[hexadecimal_en_memoria]
+    call calcular_BPF_y_mostrar
     
     jmp terminar_operacion
 
@@ -178,16 +179,41 @@ ejecutar_operacion_dec_hex_BPF:
 ejecutar_operacion_dec_bin_BPF:
     jmp terminar_operacion
 
-calcular_BCD_y_mostrar:
-    mov dword[bcd_en_memoria], eax
-    call BCD_a_decimal
-    
-    ; Mostramos el resultado
-    mov eax, dword[decimal_en_memoria]
-    call mostrar_numero
-    ret
+;;;;;;;; Rutinas Principales ;;;;;;;;;
 
-;;;;;;;; Funciones Auxiliares ;;;;;;;;
+; Calcula el valor en decimal_en_memoria de un BPF c/s que esta en bpf_en_memoria
+BPF_a_decimal:
+    ; Un BPF c/s es basicamente un numero normal pero en complemento a 2
+    ; La idea va a ser:
+    ; 1. Me fijo si el bit de signo es 1 o 0
+    ; Si es 0 entonces este es el numero
+    ; Si es 1 entonces calculo el NOT(X) y le sumo 1 y obtengo el numero
+    mov eax,dword[bpf_en_memoria]
+    ; En ebx pongo la mask para checkear el bit de signo (el primer bit)
+    ; 8000h en binario es 1000 0000 0000 0000
+    mov ebx,8000h
+    and eax,ebx
+    ; Me fijo si es todo 0
+    cmp eax,0
+    jne BPF_a_decimal_negativo
+    
+    ; Es positivo, lo copio y devuelvo
+    mov eax,dword[bpf_en_memoria]
+    jmp BPF_a_decimal_fin
+    
+    BPF_a_decimal_negativo:
+        ; Cai en el caso con un 1 en el bit de signo
+        ; Copio denuevo el numero
+        mov eax,dword[bpf_en_memoria]
+        ; Es de 16 bits asi que uso ax
+        ; Le aplico el NOT y le sumo 1
+        not ax
+        add ax,1
+        ; Tenemos el numero real en eax, lo multiplicamos por -1 para indicar que es negativo
+        imul eax,-1
+    BPF_a_decimal_fin:
+        mov dword[decimal_en_memoria],eax
+        ret
 
 ; Devuelve en decimal_en_memoria el valor del BCD en bcd_en_memoria
 BCD_a_decimal:
@@ -324,6 +350,49 @@ string_binario_a_numero:
         je fin_binario_a_numero_loop
         jmp binario_a_numero_loop
     fin_binario_a_numero_loop:
+    ret
+
+;;;;;;;; Funciones Auxiliares ;;;;;;;;
+
+; Pide un string y lo pasa de hexa a memoria
+pedir_string_hexa_a_numero:
+    ; Recibimos el string en hexadecimal
+    call recibir_configuracion_stdin
+    
+    ; Pasamos el string en hexa a numero
+    call string_hexadecimal_a_numero
+    ret
+    
+; Calcula el BPF y lo muestra
+calcular_BPF_y_mostrar:
+    mov dword[bpf_en_memoria], eax
+    call BPF_a_decimal
+    
+    ; Mostramos el resultado
+    mov eax, dword[decimal_en_memoria]
+    call mostrar_numero
+    ret
+
+; Calcula el BCD y lo muestra
+calcular_BCD_y_mostrar:
+    mov dword[bcd_en_memoria], eax
+    call BCD_a_decimal
+    
+    ; Mostramos el resultado
+    mov eax, dword[decimal_en_memoria]
+    call mostrar_numero
+    ret
+    
+pedir_string_binario_32bits_a_numero:
+    call recibir_configuracion_stdin
+    mov ebx,32
+    call string_binario_a_numero
+    ret
+    
+pedir_string_binario_16bits_a_numero:
+    call recibir_configuracion_stdin
+    mov ebx,16
+    call string_binario_a_numero
     ret
 
 ; Recibe en eax un numero y lo muestra por pantalla
