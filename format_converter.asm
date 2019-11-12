@@ -6,6 +6,9 @@ extern _gets
 section .data
 ; Constantes
 zero_ascii equ 48
+nueve_ascii equ 57
+letra_a_minuscula_ascii equ 97
+letra_a_mayuscula_ascii equ 65
 operacion_minima dd 1
 operacion_maxima dd 8
 operacion_bin_BCD dd 1
@@ -26,21 +29,26 @@ mensaje_inicial db "Seleccione el tipo de operacion:",10,\
                    "7 - Ingresar un numero decimal y mostrar configuracion hexadecimal del BPF C/S de 16 bits",10,\
                    "8 - Ingresar un numero decimal y mostrar configuracion binaria del BPF C/S de 16 bits",10,0
 formato_elegir_operacion db "%d"
-recibir_string_formato db "%s"
 seleccion_operacion db "Se eligio la operacion %d",10,0
 operacion_invalida db "Operacion fuera de rango, vuelva a elegir",10,0
 ingresar_operacion_bin_BCD db "Ingrese configuracion binaria de un BCD empaquetado de 4 bytes",10,0
+ingresar_operacion_hex_BCD db "Ingrese configuracion hexadecimal de un BCD empaquetado de 4 bytes",10,0
+ingresar_operacion_bin_BPF db "Ingrese configuracion binaria de un BPF C/S de 16 bits",10,0
+ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S de 16 bits",10,0
 mostrar_numero_formato db "Su numero es: %d",10,0
 
-; Tabla de potencias en base 10 para hacer conversiones
+; Tabla de potencias de 10 para hacer conversiones
 tabla_potencias_diez dd 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
+; Tabla de potencias de 16 para hacer conversiones
+tabla_potencias_hex dd 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456
 section .bss
 ; Reservo este espacio para representar un binario en texto
-binario_string resb 64
+configuracion_string resb 64
 string_largo_ptr resd 1
 string_largo resd 1
 tipo_operacion resd 1
 numero_ingresado resd 1
+hexadecimal_en_memoria resd 1
 binario_en_memoria resd 1
 bcd_en_memoria resd 1
 decimal_en_memoria resd 1
@@ -112,7 +120,7 @@ ejecutar_operacion_bin_BCD:
     call imprimir_mensaje
     
     ; Recibimos el string en binario
-    call recibir_string_stdin
+    call recibir_configuracion_stdin
    
     ; Pasamos el string de ceros y unos a memoria
     ; Ponemos en ebx la cantidad de bits del string
@@ -121,22 +129,41 @@ ejecutar_operacion_bin_BCD:
     
     ; Del binario en memoria agarramos el valor del BCD
     mov eax, dword[binario_en_memoria]
-    mov dword[bcd_en_memoria], eax
-    call BCD_a_decimal
-    
-    ; Mostramos el resultado
-    mov eax, dword[decimal_en_memoria]
-    call mostrar_numero
+    call calcular_BCD_y_mostrar
     
     jmp terminar_operacion
 
 ejecutar_operacion_hex_BCD:
+    ; Imprimimos mensaje para ingresar
+    mov eax, ingresar_operacion_hex_BCD
+    call imprimir_mensaje
+    
+    ; Recibimos el string en hexadecimal
+    call recibir_configuracion_stdin
+    
+    ; Pasamos el string en hexa a numero
+    call string_hexadecimal_a_numero
+    
+    ; Del hexadecimal en memoria agarramos el valor del BCD
+    mov eax, dword[hexadecimal_en_memoria]
+    call calcular_BCD_y_mostrar
+    
     jmp terminar_operacion
     
 ejecutar_operacion_bin_BPF:
+    ; Imprimimos mensaje para ingresar
+    mov eax, ingresar_operacion_hex_BPF
+    call imprimir_mensaje
+    
+    
     jmp terminar_operacion
 
 ejecutar_operacion_hex_BPF:
+    ; Imprimimos mensaje para ingresar
+    mov eax, ingresar_operacion_hex_BPF
+    call imprimir_mensaje
+    
+    
     jmp terminar_operacion
 
 ejecutar_operacion_dec_hex_BCD:
@@ -151,6 +178,14 @@ ejecutar_operacion_dec_hex_BPF:
 ejecutar_operacion_dec_bin_BPF:
     jmp terminar_operacion
 
+calcular_BCD_y_mostrar:
+    mov dword[bcd_en_memoria], eax
+    call BCD_a_decimal
+    
+    ; Mostramos el resultado
+    mov eax, dword[decimal_en_memoria]
+    call mostrar_numero
+    ret
 
 ;;;;;;;; Funciones Auxiliares ;;;;;;;;
 
@@ -212,6 +247,53 @@ BCD_a_decimal:
     BCD_a_decimal_fin:
         ret
 
+; Convierte un string en hexadecimal a un numero en la memoria
+; Va por cada digito y multiplica su valor por una potencia
+string_hexadecimal_a_numero:
+    ; Calculamos el largo del string para leer de "atras para adelante"
+    mov eax,configuracion_string
+    mov dword[string_largo_ptr],eax
+    call calcular_largo
+    mov ebx,dword[string_largo]
+    ; Armamos el contador
+    mov dword[hexadecimal_en_memoria],0
+    mov ecx,ebx
+    string_hexadecimal_a_numero_loop:
+        ; Limpiamos eax. Resto 1 al ecx y luego le sumo 1 para poder indexar bien
+        dec ecx
+        mov eax,0
+        mov al,byte[configuracion_string + ecx]
+        inc ecx
+        ; Buscamos el valor "real" del digito. Si es mayor al nueve ascii entonces es una letra
+        cmp eax,nueve_ascii
+        jg digito_hexadecimal_letra
+        sub eax,zero_ascii
+        jmp digito_hexadecimal_continuar
+        digito_hexadecimal_letra:
+            ; Aca comparo y me fijo si es mayuscula o minuscula
+            cmp eax,letra_a_minuscula_ascii
+            jge digito_hexadecimal_letra_minuscula
+            ; Si llego aca es porque es mayuscula
+            sub eax,letra_a_mayuscula_ascii
+            jmp digito_hexadecimal_letra_continuar
+            digito_hexadecimal_letra_minuscula:
+                sub eax,letra_a_minuscula_ascii
+            digito_hexadecimal_letra_continuar:
+                ; Agrego 10 porque las letras empiezan en 10 A=10, B=11, etc
+                add eax,10
+        digito_hexadecimal_continuar:
+        ; Lo multiplicamos por su potencia
+        ; Para obtener el indice de la potencia en dl hacemos size - i - 1, i = ecx, size = ebx
+        mov edx,ebx
+        sub edx,ecx
+        ; Cada elemento de la tabla mide 4 bytes
+        imul edx,4
+        mov edx,dword[tabla_potencias_hex + edx]
+        imul eax,edx
+        add dword[hexadecimal_en_memoria],eax
+    loop string_hexadecimal_a_numero_loop
+    ret
+
 ; Convierte un string en binario a un numero en la memoria
 ; Va por cada digito y lo añade a un lugar de la memoria usando el left shift
 string_binario_a_numero:
@@ -220,7 +302,7 @@ string_binario_a_numero:
     binario_a_numero_loop:
         ; Copiamos el caracter en el eax
         mov eax,0
-        mov al,byte[binario_string + ecx]
+        mov al,byte[configuracion_string + ecx]
         ; Si llegamos al fin del string finalizamos
         cmp al,0
         je fin_binario_a_numero_loop
@@ -276,11 +358,14 @@ calcular_largo:
         mov dword[string_largo],ecx
         ret
 
-recibir_string_stdin:
-    mov 
-    push binario_string
-    push recibir_string_formato
-    call _scanf
-    add esp,8
+recibir_configuracion_stdin:
+    ; Por alguna razon que desconozco, _gets me devolvia un string vacio la primera vez de llamar.
+    ; Cuando lo llamos 2 veces seguidas funciona 1 vez bien. Puede que sea mi PC
+    push configuracion_string
+    call _gets
+    add esp,4
+    push configuracion_string
+    call _gets
+    add esp,4
     ret
     
