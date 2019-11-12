@@ -44,6 +44,9 @@ mostrar_string_formato db "La configuracion es: %s",10,0
 tabla_potencias_diez dd 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
 ; Tabla de potencias de 16 para hacer conversiones
 tabla_potencias_hex dd 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456
+; Tabla de caracteres hexadecimales
+tabla_caracteres_hex db '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+
 section .bss
 ; Reservo este espacio para representar un binario en texto
 configuracion_string resb 64
@@ -250,21 +253,82 @@ ejecutar_operacion_dec_bin_BPF:
 
 ; Convierte en bcd_en_memoria el valor del decimal en decimal_en_memoria
 decimal_a_BCD:
-ret
+    ; La idea es ir dividiendo el numero original para obtener los digitos e ir poniendo uno en cada nibble
+    ; mas una letra (B o F) dependiendo del signo
+    mov dword[bcd_en_memoria],0
+    mov ecx,0
+    mov eax,dword[decimal_en_memoria]
+    ; Vemos el signo. Ponemos F si es positivo o B en caso de ser negativo
+    add dword[bcd_en_memoria],0fh
+    cmp dword[decimal_en_memoria],0
+    jge decimal_a_BCD_loop
+    mov dword[bcd_en_memoria],0
+    add dword[bcd_en_memoria],0bh
+    ; Multiplicamos por -1 para que eax quede el valor absoluto del numero
+    imul eax,-1
+    decimal_a_BCD_loop:
+    	; Dividimos por 10 para obtener los digitos en base 10. El resto queda en edx
+        mov edx,0
+        mov ebx,10
+        div ebx
+        ; Usamos el left shift para mover el digito hacia el nibble en el que va. ecx = nibble actual, 1 nibble = 4 bits, shift = (ecx + 1) * 4
+        mov ebx,ecx
+        imul ecx,4
+        ; Sumamos 4 para no pisar la letra de signo
+        add ecx,4
+        shl edx,cl
+        ; Restauramos ecx
+        mov ecx,ebx
+        ; Añadimos en la memoria el valor usando el OR
+        or dword[bcd_en_memoria],edx
+        inc ecx
+        ; Si es 8 significa que hicimos todos lo nibbles entonces tenemos que cortar
+        cmp ecx,8
+        je decimal_a_BCD_fin
+    jmp decimal_a_BCD_loop
+    decimal_a_BCD_fin:
+        ret
 
-; Devuelve en configuracion_string un string que representa en hexadecimal lo que hay en hexadecimal_en_memoria
+; Devuelve en configuracion_string un string que representa en hexadecimal lo que hay en decimal_en_memoria
 decimal_a_string_hexadecimal:
     ; La idea es cada 4 bits aplicar una mask y obtener ese numero.
     ; Despues usarlo como indice en una tabla y mapearlo al caracter correcto
-
     ; Guardamos los nibbles recibidos
     mov ecx,eax
+    mov edx,eax
     ; Añadimos el "\0" al string
     mov byte[configuracion_string + ecx],0
     ; Creamos la mask
     mov ebx,0Fh
     decimal_a_string_hexadecimal_loop:
-
+        ; El loop es de (eax, 0) pero necesito que sea de [eax-1, 0] 
+        ; asi que resto 1 al counter pero le sumo 1 antes de la instrucion loop
+        dec ecx
+        mov eax,dword[decimal_en_memoria]
+        and eax,ebx
+        ; Normalizo el valor
+        ; Para esto hago un shift de la cantidad de bits que ya vimos
+        ; En edx tengo la cantidad de nibbles
+        imul ecx,-1
+        add ecx,edx
+        sub ecx,1
+        ; Multiplico por 4
+        shl ecx,2
+        ; Hago el shift
+        shr eax,cl
+        ; Restauro
+        ; Divido por 4
+        shr ecx,2
+        add ecx,1
+        sub ecx,edx
+        imul ecx,-1
+        ; Ya restaure ecx al valor original
+        ; Le doy el valor de la tabla
+        mov al,byte[tabla_caracteres_hex + eax]
+        mov byte[configuracion_string + ecx],al
+        ; Muevo la mask 4 bits (1 nibble)
+        shl ebx,4
+        inc ecx
     loop decimal_a_string_hexadecimal_loop
     ret
 
@@ -272,8 +336,6 @@ decimal_a_string_hexadecimal:
 decimal_a_string_binario:
     ; La idea es:
     ; Ver el ultimo digito del numero usando una mask.
-    ; Si es 1 entonces pongo un 1 en el string y le resto 1 al numero
-    ; Si es 0 pongo un 0
     ; Divido por 2
     ; Repetir estos pasos hasta que el numero sea 0
     
@@ -287,19 +349,13 @@ decimal_a_string_binario:
         mov ebx,1
         mov edx,eax
         and edx,ebx
-        ; Me fijo si es 1
-        cmp edx,1
-        jne decimal_a_string_binario_es_0
-        ; Le resto 1
-        sub eax,1
-        decimal_a_string_binario_es_0:
-            ; Divido por 2
-            shr eax,1
-            ; Añado al string
-            add edx,zero_ascii
-            dec ecx
-            mov byte[configuracion_string + ecx],dl
-            inc ecx
+        ; Divido por 2
+        shr eax,1
+        ; Añado al string
+        add edx,zero_ascii
+        dec ecx
+        mov byte[configuracion_string + ecx],dl
+        inc ecx
         loop decimal_a_string_binario_loop
     decimal_a_string_binario_fin:
         ret
