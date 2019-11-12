@@ -9,6 +9,7 @@ zero_ascii equ 48
 nueve_ascii equ 57
 letra_a_minuscula_ascii equ 97
 letra_a_mayuscula_ascii equ 65
+; Operaciones
 operacion_minima dd 1
 operacion_maxima dd 8
 operacion_bin_BCD dd 1
@@ -28,14 +29,16 @@ mensaje_inicial db "Seleccione el tipo de operacion:",10,\
                    "6 - Ingresar un numero decimal y mostrar configuracion binaria del BCD empaquetado de 4 bytes",10,\
                    "7 - Ingresar un numero decimal y mostrar configuracion hexadecimal del BPF C/S de 16 bits",10,\
                    "8 - Ingresar un numero decimal y mostrar configuracion binaria del BPF C/S de 16 bits",10,0
-formato_elegir_operacion db "%d"
+formato_recibir_numero db "%d"
 seleccion_operacion db "Se eligio la operacion %d",10,0
 operacion_invalida db "Operacion fuera de rango, vuelva a elegir",10,0
 ingresar_operacion_bin_BCD db "Ingrese configuracion binaria de un BCD empaquetado de 4 bytes",10,0
 ingresar_operacion_hex_BCD db "Ingrese configuracion hexadecimal de un BCD empaquetado de 4 bytes",10,0
 ingresar_operacion_bin_BPF db "Ingrese configuracion binaria de un BPF C/S de 16 bits",10,0
 ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S de 16 bits",10,0
-mostrar_numero_formato db "Su numero es: %d",10,0
+ingresar_operacion_decimal db "Ingrese un numero decimal",10,0
+mostrar_numero_formato db "El numero es: %d",10,0
+mostrar_string_formato db "La configuracion es: %s",10,0
 
 ; Tabla de potencias de 10 para hacer conversiones
 tabla_potencias_diez dd 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
@@ -69,7 +72,7 @@ mostrar_mensaje_inicial_y_elegir_operacion:
 
     elegir_operacion:
         push tipo_operacion
-        push formato_elegir_operacion
+        push formato_recibir_numero
         call _scanf
         add esp,8
         
@@ -114,7 +117,9 @@ ejecutar_operacion:
     je ejecutar_operacion_dec_bin_BPF
     terminar_operacion:
         ret
-    
+        
+;;; Operaciones de recibir alguna configuracion y mostrar el decimal ;;;  
+     
 ejecutar_operacion_bin_BCD:
     ; Imprimimos mensaje para ingresar
     mov eax, ingresar_operacion_bin_BCD
@@ -167,19 +172,114 @@ ejecutar_operacion_hex_BPF:
     
     jmp terminar_operacion
 
+;;; Operaciones de recibir algo en decimal y procesar ;;;
+
 ejecutar_operacion_dec_hex_BCD:
+    ; Imprimimos mensaje para ingresar
+    mov eax,ingresar_operacion_decimal
+    call imprimir_mensaje
+    call recibir_decimal_stdin
+    
     jmp terminar_operacion
 
 ejecutar_operacion_dec_bin_BCD:
+    ; Imprimimos mensaje para ingresar
+    mov eax,ingresar_operacion_decimal
+    call imprimir_mensaje
+    call recibir_decimal_stdin
+
     jmp terminar_operacion
 
 ejecutar_operacion_dec_hex_BPF:
+    ; Imprimimos mensaje para ingresar
+    mov eax,ingresar_operacion_decimal
+    call imprimir_mensaje
+    call recibir_decimal_stdin
+    
+    ; Como intel ya guarda el numero en complemento a 2, no hay necesidad de hacer ninguna transformacion.
+    
+    ; Pasamos 16 bits = 2 bytes = 4 nibbles
+    mov eax,4
+    call decimal_a_string_hexadecimal
+
+    ; Finalmente imprimimos
+    mov eax,configuracion_string
+    call mostrar_string
+
     jmp terminar_operacion
 
 ejecutar_operacion_dec_bin_BPF:
+    ; Imprimimos mensaje para ingresar
+    mov eax,ingresar_operacion_decimal
+    call imprimir_mensaje
+    call recibir_decimal_stdin
+    
+    ; Como intel ya guarda el numero en complemento a 2, no hay necesidad de hacer ninguna transformacion.
+    
+    ; BPF c/s 16 bits
+    mov eax,16
+    call decimal_a_string_binario
+    
+    ; Finalmente imprimimos
+    mov eax,configuracion_string
+    call mostrar_string
+    
     jmp terminar_operacion
 
 ;;;;;;;; Rutinas Principales ;;;;;;;;;
+
+; Devuelve en configuracion_string un string que representa en hexadecimal lo que hay en hexadecimal_en_memoria
+decimal_a_string_hexadecimal:
+    ; La idea es cada 4 bits aplicar una mask y obtener ese numero.
+    ; Despues usarlo como indice en una tabla y mapearlo al caracter correcto
+
+    ; Guardamos los nibbles recibidos
+    mov ecx,eax
+    ; Añadimos el "\0" al string
+    mov byte[configuracion_string + ecx],0
+    ; Creamos la mask
+    mov ebx,0Fh
+    decimal_a_string_hexadecimal_loop:
+
+    loop decimal_a_string_hexadecimal_loop
+    ret
+
+; Devuelve en configuracion_string un string que representa en binario lo que hay en decimal_en_memoria
+decimal_a_string_binario:
+    ; La idea es:
+    ; Ver el ultimo digito del numero usando una mask.
+    ; Si es 1 entonces pongo un 1 en el string y le resto 1 al numero
+    ; Si es 0 pongo un 0
+    ; Divido por 2
+    ; Repetir estos pasos hasta que el numero sea 0
+    
+    ; Recibe en eax los bits
+    mov ecx,eax
+    mov eax,dword[decimal_en_memoria]
+    ; Añadimos el "\0" al string
+    mov byte[configuracion_string + ecx],0
+    decimal_a_string_binario_loop:
+        ; Armo la mask
+        mov ebx,1
+        mov edx,eax
+        and edx,ebx
+        ; Me fijo si es 1
+        cmp edx,1
+        jne decimal_a_string_binario_es_0
+        ; Le resto 1
+        sub eax,1
+        decimal_a_string_binario_es_0:
+            ; Divido por 2
+            shr eax,1
+            ; Añado al string
+            add edx,zero_ascii
+            dec ecx
+            mov byte[configuracion_string + ecx],dl
+            inc ecx
+        loop decimal_a_string_binario_loop
+    decimal_a_string_binario_fin:
+        ret
+    
 
 ; Calcula el valor en decimal_en_memoria de un BPF c/s que esta en bpf_en_memoria
 BPF_a_decimal:
@@ -208,6 +308,7 @@ BPF_a_decimal:
         ; Es de 16 bits asi que uso ax
         ; Le aplico el NOT y le sumo 1
         not ax
+        ; Tambien pude haber hecho xor ax,FFFFh como nos enseño ramiro 
         add ax,1
         ; Tenemos el numero real en eax, lo multiplicamos por -1 para indicar que es negativo
         imul eax,-1
@@ -395,6 +496,14 @@ pedir_string_binario_16bits_a_numero:
     call string_binario_a_numero
     ret
 
+; Recibe en eax un string y lo muestra por pantalla
+mostrar_string:
+    push eax
+    push mostrar_string_formato
+    call _printf
+    add esp,8
+    ret
+
 ; Recibe en eax un numero y lo muestra por pantalla
 mostrar_numero:
     push eax
@@ -436,5 +545,12 @@ recibir_configuracion_stdin:
     push configuracion_string
     call _gets
     add esp,4
+    ret
+  
+recibir_decimal_stdin:
+    push decimal_en_memoria
+    push formato_recibir_numero
+    call _scanf
+    add esp,8
     ret
     
