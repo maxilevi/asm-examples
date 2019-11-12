@@ -32,11 +32,11 @@ mensaje_inicial db "Seleccione el tipo de operacion:",10,\
 formato_recibir_numero db "%d"
 seleccion_operacion db "Se eligio la operacion %d",10,0
 operacion_invalida db "Operacion fuera de rango, vuelva a elegir",10,0
-ingresar_operacion_bin_BCD db "Ingrese configuracion binaria de un BCD empaquetado de 4 bytes",10,0
-ingresar_operacion_hex_BCD db "Ingrese configuracion hexadecimal de un BCD empaquetado de 4 bytes",10,0
-ingresar_operacion_bin_BPF db "Ingrese configuracion binaria de un BPF C/S de 16 bits",10,0
-ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S de 16 bits",10,0
-ingresar_operacion_decimal db "Ingrese un numero decimal",10,0
+ingresar_operacion_bin_BCD db "Ingrese configuracion binaria de un BCD empaquetado de 4 bytes:",10,0
+ingresar_operacion_hex_BCD db "Ingrese configuracion hexadecimal de un BCD empaquetado de 4 bytes:",10,0
+ingresar_operacion_bin_BPF db "Ingrese configuracion binaria de un BPF C/S de 16 bits:",10,0
+ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S de 16 bits:",10,0
+ingresar_operacion_decimal db "Ingrese un numero decimal:",10,0
 mostrar_numero_formato db "El numero es: %d",10,0
 mostrar_string_formato db "La configuracion es: %s",10,0
 
