@@ -1,7 +1,6 @@
 global _main
 extern _printf
 extern _scanf
-extern _fgets
 
 section .data
 ; Constantes
