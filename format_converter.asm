@@ -1,7 +1,7 @@
 global _main
 extern _printf
 extern _scanf
-extern _gets
+extern _fgets
 
 section .data
 ; Constantes
@@ -39,6 +39,7 @@ ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S d
 ingresar_operacion_decimal db "Ingrese un numero decimal:",10,0
 mostrar_numero_formato db "El numero es: %d",10,0
 mostrar_string_formato db "La configuracion es: %s",10,0
+string_formato db "%s"
 
 ; Tabla de potencias de 10 para hacer conversiones
 tabla_potencias_diez dd 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000
@@ -49,7 +50,7 @@ tabla_caracteres_hex db '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', '
 
 section .bss
 ; Reservo este espacio para representar un binario en texto
-configuracion_string resb 64
+configuracion_string resb 33
 string_largo_ptr resd 1
 string_largo resd 1
 tipo_operacion resd 1
@@ -62,7 +63,6 @@ bpf_en_memoria resd 1
 
 section .text
 _main:
-    mov ebp, esp; for correct debugging
     call mostrar_mensaje_inicial_y_elegir_operacion
     call ejecutar_operacion
     ret
@@ -471,6 +471,9 @@ string_hexadecimal_a_numero:
         mov eax,0
         mov al,byte[configuracion_string + ecx]
         inc ecx
+        ; Si es el find del string cortamos
+        cmp al,0
+        je string_hexadecimal_a_numero_loop_fin
         ; Buscamos el valor "real" del digito. Si es mayor al nueve ascii entonces es una letra
         cmp eax,nueve_ascii
         jg digito_hexadecimal_letra
@@ -499,7 +502,8 @@ string_hexadecimal_a_numero:
         imul eax,edx
         add dword[hexadecimal_en_memoria],eax
     loop string_hexadecimal_a_numero_loop
-    ret
+    string_hexadecimal_a_numero_loop_fin:
+        ret
 
 ; Convierte un string en binario a un numero en la memoria
 ; Va por cada digito y lo añade a un lugar de la memoria usando el left shift
@@ -623,14 +627,10 @@ calcular_largo:
         ret
 
 recibir_configuracion_stdin:
-    ; Por alguna razon que desconozco, _gets me devolvia un string vacio la primera vez de llamar.
-    ; Cuando lo llamos 2 veces seguidas funciona 1 vez bien. Puede que sea mi PC
     push configuracion_string
-    call _gets
-    add esp,4
-    push configuracion_string
-    call _gets
-    add esp,4
+    push string_formato
+    call _scanf
+    add esp,8
     ret
   
 recibir_decimal_stdin:
