@@ -28,7 +28,6 @@ mensaje_inicial db "Seleccione el tipo de operacion:",10,\
                    "6 - Ingresar un numero decimal y mostrar configuracion binaria del BCD empaquetado de 4 bytes",10,\
                    "7 - Ingresar un numero decimal y mostrar configuracion hexadecimal del BPF C/S de 16 bits",10,\
                    "8 - Ingresar un numero decimal y mostrar configuracion binaria del BPF C/S de 16 bits",10,0
-formato_recibir_numero db "%d"
 seleccion_operacion db "Se eligio la operacion %d",10,0
 operacion_invalida db "Operacion fuera de rango, vuelva a elegir",10,0
 ingresar_operacion_bin_BCD db "Ingrese configuracion binaria de un BCD empaquetado de 4 bytes:",10,0
@@ -38,6 +37,8 @@ ingresar_operacion_hex_BPF db "Ingrese configuracion hexadecimal de un BPF C/S d
 ingresar_operacion_decimal db "Ingrese un numero decimal:",10,0
 mostrar_numero_formato db "El numero es: %d",10,0
 mostrar_string_formato db "La configuracion es: %s",10,0
+decimal_invalido_mensaje db "Decimal invalido. Ingrese nuevamente:",10,0
+binario_invalido_mensaje db "Binario invalido. Ingrese nuevamente:",10,0
 string_formato db "%s"
 
 ; Tabla de potencias de 10 para hacer conversiones
@@ -50,6 +51,7 @@ tabla_caracteres_hex db '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', '
 section .bss
 ; Reservo este espacio para representar un binario en texto
 configuracion_string resb 33
+decimal_string resb 33
 string_largo_ptr resd 1
 string_largo resd 1
 tipo_operacion resd 1
@@ -59,6 +61,7 @@ binario_en_memoria resd 1
 bcd_en_memoria resd 1
 decimal_en_memoria resd 1
 bpf_en_memoria resd 1
+es_negativo resd 1
 
 section .text
 _main:
@@ -73,10 +76,9 @@ mostrar_mensaje_inicial_y_elegir_operacion:
     jmp elegir_operacion
 
     elegir_operacion:
-        push tipo_operacion
-        push formato_recibir_numero
-        call _scanf
-        add esp,8
+        call recibir_decimal_stdin
+        mov eax,dword[decimal_en_memoria]
+        mov dword[tipo_operacion],eax
         
         mov eax,dword[tipo_operacion]
         cmp eax,dword[operacion_minima]
@@ -536,6 +538,76 @@ string_binario_a_numero:
     fin_binario_a_numero_loop:
     ret
 
+; Convierte un string en decimal_string a un numero en decimal_en_memoria
+decimal_string_a_memoria:
+    mov eax,decimal_string
+    mov dword[string_largo_ptr],eax
+    call calcular_largo
+    mov ebx,dword[string_largo]
+
+    mov dword[es_negativo],1
+    mov dword[decimal_en_memoria],0
+    mov ecx,0
+    mov al,byte[decimal_string + ecx]
+    cmp al,'-'
+    jne decimal_string_a_memoria_loop
+    ; Si llegamos aca es porque es negativo
+    mov dword[es_negativo],-1
+    inc ecx
+    decimal_string_a_memoria_loop:
+        mov eax,0
+        mov al,byte[decimal_string + ecx]
+        cmp al,'9'
+        jg decimal_string_a_memoria_invalido
+        cmp al,'0'
+        jl decimal_string_a_memoria_invalido
+        ; Le resto el zero ascii
+        sub eax,'0'
+        mov edx,ebx
+        sub edx,ecx
+        dec edx
+        imul edx,4
+        ; Multiplico por 4 porque son dwords (4 bytes)
+        mov edx,dword[tabla_potencias_diez + edx]
+        imul eax,edx
+        add dword[decimal_en_memoria],eax
+        inc ecx
+        cmp ecx,ebx
+        jne decimal_string_a_memoria_loop
+    ; Multiplicamos por si es negativo
+    mov edx,dword[es_negativo]
+    mov eax,dword[decimal_en_memoria]
+    imul eax,edx
+    mov dword[decimal_en_memoria],eax
+    ; Marcamos que no hubo error
+    mov eax,0
+    ret
+    decimal_string_a_memoria_invalido:
+        ; Marco el eax con 1 y devuelvo
+        mov eax,1
+        ret
+        
+; Devuelve en eax 0 si el string binario dado es valido o 1 en caso contrario
+validar_binario:
+    mov ecx,0
+    validar_binario_loop:
+        mov eax,0
+        mov al,byte[configuracion_string + ecx]
+        cmp eax,0
+        je validar_binario_loop_valido
+        cmp eax,'0'
+        jl validar_binario_loop_invalido
+        cmp eax,'1'
+        jg validar_binario_loop_invalido
+        inc ecx
+        jmp validar_binario_loop
+    validar_binario_loop_valido:
+        mov eax,0
+        ret
+    validar_binario_loop_invalido:
+        mov eax,1
+        ret
+
 ;;;;;;;; Funciones Auxiliares ;;;;;;;;
 
 mostrar_configuracion:
@@ -574,13 +646,13 @@ calcular_BCD_y_mostrar:
     ret
     
 pedir_string_binario_32bits_a_numero:
-    call recibir_configuracion_stdin
+    call recibir_binario_stdin
     mov ebx,32
     call string_binario_a_numero
     ret
     
 pedir_string_binario_16bits_a_numero:
-    call recibir_configuracion_stdin
+    call recibir_binario_stdin
     mov ebx,16
     call string_binario_a_numero
     ret
@@ -631,11 +703,29 @@ recibir_configuracion_stdin:
     call _scanf
     add esp,8
     ret
+    
+recibir_binario_stdin:
+    call recibir_configuracion_stdin
+    call validar_binario
+    cmp eax,1
+    je recibir_binario_stdin_invalido
+    ret
+    recibir_binario_stdin_invalido:
+        mov eax,binario_invalido_mensaje
+        call imprimir_mensaje
+        jmp recibir_binario_stdin
   
 recibir_decimal_stdin:
-    push decimal_en_memoria
-    push formato_recibir_numero
+    push decimal_string
+    push string_formato
     call _scanf
     add esp,8
+    call decimal_string_a_memoria
+    cmp eax,1
+    je recibir_decimal_stdin_invalido
     ret
+    recibir_decimal_stdin_invalido:
+        mov eax,decimal_invalido_mensaje
+        call imprimir_mensaje
+        jmp recibir_decimal_stdin
     
